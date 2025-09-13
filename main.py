@@ -710,6 +710,103 @@ async def download_video(task_id: str):
         media_type="video/mp4"
     )
 
+@app.get("/library")
+async def get_video_library():
+    """Get library of all processed videos"""
+    output_dir = TEMP_DIR / "output"
+    
+    if not output_dir.exists():
+        return {"videos": []}
+    
+    videos = []
+    
+    # Get all MP4 files in output directory
+    for video_file in output_dir.glob("*.mp4"):
+        try:
+            # Get file stats
+            stat = video_file.stat()
+            file_size = stat.st_size
+            created_time = datetime.fromtimestamp(stat.st_ctime)
+            modified_time = datetime.fromtimestamp(stat.st_mtime)
+            
+            # Extract task_id from filename (filename is task_id.mp4)
+            task_id = video_file.stem
+            
+            # Get task info if available
+            task_info = tasks.get(task_id, {})
+            
+            video_info = {
+                "task_id": task_id,
+                "filename": video_file.name,
+                "file_size": file_size,
+                "file_size_mb": round(file_size / (1024 * 1024), 2),
+                "created_at": created_time.isoformat(),
+                "modified_at": modified_time.isoformat(),
+                "download_url": f"/download/{task_id}",
+                "status": task_info.get("status", "unknown") if task_info else "unknown",
+                "progress": task_info.get("progress", 0) if task_info else 0
+            }
+            
+            videos.append(video_info)
+            
+        except Exception as e:
+            print(f"Error processing video file {video_file}: {e}")
+            continue
+    
+    # Sort by creation time (newest first)
+    videos.sort(key=lambda x: x["created_at"], reverse=True)
+    
+    return {
+        "videos": videos,
+        "total_count": len(videos),
+        "total_size_mb": sum(v["file_size_mb"] for v in videos)
+    }
+
+@app.get("/library/{task_id}")
+async def get_video_info(task_id: str):
+    """Get detailed info about a specific video"""
+    output_file = TEMP_DIR / "output" / f"{task_id}.mp4"
+    
+    if not output_file.exists():
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    try:
+        # Get file stats
+        stat = output_file.stat()
+        file_size = stat.st_size
+        created_time = datetime.fromtimestamp(stat.st_ctime)
+        modified_time = datetime.fromtimestamp(stat.st_mtime)
+        
+        # Get task info if available
+        task_info = tasks.get(task_id, {})
+        
+        # Try to get video metadata
+        metadata = {}
+        try:
+            metadata = await get_video_metadata(str(output_file))
+        except:
+            pass
+        
+        video_info = {
+            "task_id": task_id,
+            "filename": output_file.name,
+            "file_size": file_size,
+            "file_size_mb": round(file_size / (1024 * 1024), 2),
+            "created_at": created_time.isoformat(),
+            "modified_at": modified_time.isoformat(),
+            "download_url": f"/download/{task_id}",
+            "status": task_info.get("status", "unknown") if task_info else "unknown",
+            "progress": task_info.get("progress", 0) if task_info else 0,
+            "metadata": metadata,
+            "video_path": str(output_file),
+            "music_path": task_info.get("music_path") if task_info else None
+        }
+        
+        return video_info
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting video info: {str(e)}")
+
 @app.get("/")
 async def root():
     """Health check endpoint"""
