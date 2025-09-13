@@ -23,7 +23,8 @@ pip install -r requirements.txt
 ```bash
 # Create .env file
 SUNO_API_KEY=your_suno_api_key_here
-SUNO_BASE_URL=https://api.suno.ai
+SUNO_BASE_URL=https://studio-api.prod.suno.com/api/v2/external/hackmit
+CLAUDE_API_KEY=your_claude_api_key_here
 HOST=0.0.0.0
 PORT=8000
 TEMP_DIR=temp

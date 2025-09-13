@@ -2,6 +2,7 @@ import os
 import uuid
 import asyncio
 import shutil
+import base64
 from datetime import datetime
 from typing import Dict, Optional
 from enum import Enum
@@ -13,6 +14,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from anthropic import Anthropic
 
 # Load environment variables
 load_dotenv()
@@ -20,6 +22,7 @@ load_dotenv()
 # Configuration
 SUNO_API_KEY = os.getenv("SUNO_API_KEY", "your_suno_api_key_here")
 SUNO_BASE_URL = os.getenv("SUNO_BASE_URL", "https://studio-api.prod.suno.com/api/v2/external/hackmit")
+CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "your_claude_api_key_here")
 TEMP_DIR = Path(os.getenv("TEMP_DIR", "temp"))
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "104857600"))  # 100MB
 
@@ -87,13 +90,125 @@ def get_video_metadata(video_path: str) -> dict:
         print(f"Error extracting metadata: {e}")
         return {'duration': 30, 'width': 1920, 'height': 1080, 'fps': 30}
 
-def generate_music_prompt(metadata: dict) -> str:
-    """Generate music prompt based on video metadata"""
+def extract_video_frames(video_path: str, num_frames: int = 3) -> list:
+    """Extract key frames from video for analysis"""
+    try:
+        frames = []
+        probe = ffmpeg.probe(video_path)
+        duration = float(probe['streams'][0]['duration'])
+        
+        # Extract frames at different points in the video
+        for i in range(num_frames):
+            timestamp = (duration / (num_frames + 1)) * (i + 1)
+            frame_path = str(TEMP_DIR / f"frame_{i}.jpg")
+            
+            (
+                ffmpeg
+                .input(video_path, ss=timestamp)
+                .output(frame_path, vframes=1, format='image2', vcodec='mjpeg')
+                .overwrite_output()
+                .run(quiet=True)
+            )
+            frames.append(frame_path)
+        
+        return frames
+    except Exception as e:
+        print(f"Frame extraction error: {e}")
+        return []
+
+def encode_image_to_base64(image_path: str) -> str:
+    """Convert image to base64 for Claude API"""
+    try:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+    except Exception as e:
+        print(f"Image encoding error: {e}")
+        return ""
+
+async def analyze_video_with_claude(video_path: str, metadata: dict) -> str:
+    """Use Claude API to analyze video frames and generate music prompt"""
+    try:
+        # Extract frames from video
+        frames = extract_video_frames(video_path, num_frames=3)
+        if not frames:
+            return generate_basic_prompt(metadata)
+        
+        # Initialize Claude client
+        client = Anthropic(api_key=CLAUDE_API_KEY)
+        
+        # Prepare images for Claude
+        image_data = []
+        for frame_path in frames:
+            base64_image = encode_image_to_base64(frame_path)
+            if base64_image:
+                image_data.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": base64_image
+                    }
+                })
+        
+        if not image_data:
+            return generate_basic_prompt(metadata)
+        
+        # Create prompt for Claude
+        duration = int(metadata.get('duration', 30))
+        
+        claude_prompt = f"""Analyze these video frames and generate a music prompt for Suno AI that matches the vibe, mood, and content of the video.
+
+Video details:
+- Duration: {duration} seconds
+- Resolution: {metadata.get('width', 1920)}x{metadata.get('height', 1080)}
+
+Please analyze the video frames and provide a music prompt that includes:
+1. The mood/atmosphere (energetic, calm, dramatic, playful, etc.)
+2. The musical style/genre (electronic, orchestral, pop, rock, ambient, etc.)
+3. The tempo/energy level (fast, medium, slow)
+4. Any specific instruments or sounds that would fit
+5. The overall vibe that matches what you see
+
+Return ONLY the music prompt, nothing else. Make it specific and descriptive for Suno AI.
+
+Example format: "energetic electronic music with driving beats and synth melodies, perfect for an outdoor adventure video, upbeat and motivational" """
+
+        # Call Claude API
+        message = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=200,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": claude_prompt}
+                    ] + image_data
+                }
+            ]
+        )
+        
+        prompt = message.content[0].text.strip()
+        print(f"Claude generated prompt: {prompt}")
+        
+        # Clean up frame files
+        for frame_path in frames:
+            try:
+                os.remove(frame_path)
+            except:
+                pass
+        
+        return prompt
+        
+    except Exception as e:
+        print(f"Claude analysis error: {e}")
+        return generate_basic_prompt(metadata)
+
+def generate_basic_prompt(metadata: dict) -> str:
+    """Fallback basic prompt generation"""
     duration = int(metadata.get('duration', 30))
     width = metadata.get('width', 1920)
     height = metadata.get('height', 1080)
     
-    # Simple prompt generation based on video characteristics
     if duration < 15:
         tempo = "fast-paced"
     elif duration < 60:
@@ -107,6 +222,15 @@ def generate_music_prompt(metadata: dict) -> str:
         quality = "standard"
     
     return f"{tempo} music for {duration}s {quality} video, energetic soundtrack"
+
+async def generate_music_prompt(metadata: dict, video_path: str = None) -> str:
+    """Generate music prompt using Claude API if available, otherwise basic prompt"""
+    if CLAUDE_API_KEY and CLAUDE_API_KEY != "your_claude_api_key_here" and video_path:
+        # Use Claude for advanced analysis
+        return await analyze_video_with_claude(video_path, metadata)
+    else:
+        # Fallback to basic prompt
+        return generate_basic_prompt(metadata)
 
 async def call_suno_api(prompt: str) -> str:
     """Call Suno API to generate music"""
@@ -254,7 +378,7 @@ async def process_video_task(task_id: str):
         task.updated_at = datetime.now()
         
         metadata = get_video_metadata(mp4_path)
-        prompt = generate_music_prompt(metadata)
+        prompt = await generate_music_prompt(metadata, mp4_path)
         
         # Call Suno API
         suno_task_id = await call_suno_api(prompt)
