@@ -11,7 +11,7 @@ from pathlib import Path
 
 import httpx
 import ffmpeg
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -806,6 +806,67 @@ async def get_video_info(task_id: str):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting video info: {str(e)}")
+
+@app.post("/rtmp_callback")
+async def rtmp_callback(request: Request):
+    """Handle RTMP stream completion callback"""
+    try:
+        # Parse RTMP callback data
+        form_data = await request.form()
+        stream_key = form_data.get("name", "")
+        file_path = form_data.get("file", "")
+        
+        print(f"🎥 RTMP STREAM COMPLETED:")
+        print(f"   Stream Key: {stream_key}")
+        print(f"   File Path: {file_path}")
+        
+        if not file_path or not os.path.exists(file_path):
+            print(f"❌ RTMP file not found: {file_path}")
+            return {"status": "error", "message": "File not found"}
+        
+        # Generate task ID and move file to our temp directory
+        task_id = generate_task_id()
+        video_path = str(TEMP_DIR / "videos" / f"{task_id}.flv")
+        
+        # Move the RTMP file to our temp directory
+        shutil.move(file_path, video_path)
+        print(f"✅ RTMP file moved to: {video_path}")
+        
+        # Create task
+        task = Task(
+            task_id=task_id,
+            status=TaskStatus.UPLOADED,
+            progress=0,
+            video_path=video_path,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+        tasks[task_id] = task
+        
+        print(f"✅ RTMP task created: {task_id}")
+        
+        return {
+            "status": "success", 
+            "task_id": task_id,
+            "message": "RTMP stream processed successfully"
+        }
+        
+    except Exception as e:
+        print(f"❌ RTMP callback error: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.get("/rtmp_info")
+async def get_rtmp_info():
+    """Get RTMP server information for clients"""
+    return {
+        "rtmp_url": "rtmp://localhost:1935/live",
+        "stream_key": "your_stream_key_here",
+        "instructions": {
+            "obs": "Use rtmp://localhost:1935/live as Server, and any key as Stream Key",
+            "ffmpeg": "ffmpeg -i input.mp4 -f flv rtmp://localhost:1935/live/your_key",
+            "note": "Stream will be automatically processed when you stop streaming"
+        }
+    }
 
 @app.get("/")
 async def root():
