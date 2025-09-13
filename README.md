@@ -1,118 +1,148 @@
 # Mentra + Suno HackMIT Backend
 
-FastAPI backend server that integrates Mentra smart glasses with Suno AI music generation.
+A FastAPI backend that processes video from Mentra smart glasses and generates synchronized music using Suno AI.
 
-## Features
+## Overview
 
-- Accept FLV video uploads from RTMP server
-- Convert FLV to MP4 for better compatibility
-- Generate music prompts based on video metadata
-- Call Suno API for AI music generation
-- Merge video and audio using FFmpeg
-- Real-time status tracking
-- Automatic file cleanup
+This system accepts FLV video uploads from RTMP servers, analyzes the video content using Claude AI, generates contextual music with Suno AI, and produces a final MP4 with the generated audio replacing the original.
+
+## Core Functionality
+
+### Video Processing
+- Accepts FLV video uploads from RTMP streams
+- Converts FLV to MP4 for compatibility
+- Extracts video metadata (duration, resolution, frame rate)
+- Processes video frames for content analysis
+
+### AI Integration
+- **Claude AI**: Analyzes video frames to generate contextual music prompts
+- **Suno AI**: Generates music based on video content and style
+- Real-time polling for music generation status
+
+### Audio Processing
+- Downloads generated music from Suno
+- Trims music to match video duration
+- Replaces original video audio with generated music
+- Preserves music files for debugging
+
+### Concurrency Control
+- Maximum 3 concurrent processing tasks
+- Async FFmpeg operations to maintain server responsiveness
+- Background task processing with status tracking
+
+## API Endpoints
+
+### POST /upload
+Upload FLV video file from RTMP server.
+- **Input**: FLV file (max 100MB)
+- **Output**: Task ID for tracking
+- **Response**: `{"task_id": "uuid", "status": "uploaded"}`
+
+### POST /generate/{task_id}
+Start music generation process for uploaded video.
+- **Input**: Task ID from upload
+- **Output**: Background processing initiated
+- **Response**: `{"message": "Music generation started"}`
+
+### GET /status/{task_id}
+Check processing status and progress.
+- **Input**: Task ID
+- **Output**: Current status and progress percentage
+- **Statuses**: `uploaded`, `converting`, `generating`, `merging`, `done`, `error`
+
+### GET /download/{task_id}
+Download final processed video.
+- **Input**: Task ID
+- **Output**: MP4 file with generated music
+- **Note**: Cleans up temporary files after download
+
+## Processing Pipeline
+
+1. **Upload**: Store FLV video temporarily
+2. **Convert**: Convert FLV to MP4 using FFmpeg
+3. **Analyze**: Extract metadata and analyze video frames
+4. **Generate**: Create music prompt and call Suno API
+5. **Poll**: Wait for music generation completion
+6. **Download**: Retrieve generated MP3 from Suno
+7. **Trim**: Match music duration to video length
+8. **Merge**: Replace video audio with generated music
+9. **Complete**: Return final MP4 with new audio
 
 ## Setup
 
-1. Install dependencies:
+### Prerequisites
+- Python 3.8+
+- FFmpeg installed on system
+- Suno API key (HackMIT 2025)
+- Claude API key
+
+### Installation
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Set up environment variables:
+### Configuration
+Create `.env` file:
 ```bash
-# Create .env file
 SUNO_API_KEY=your_suno_api_key_here
 SUNO_BASE_URL=https://studio-api.prod.suno.com/api/v2/external/hackmit
 CLAUDE_API_KEY=your_claude_api_key_here
-HOST=0.0.0.0
-PORT=8000
 TEMP_DIR=temp
 MAX_FILE_SIZE=104857600
 ```
 
-3. Run the server:
+### Run Server
 ```bash
 python main.py
 ```
 
-## API Endpoints
+## Integration
 
-### Upload Video
-```
-POST /upload
-- Accept FLV file from RTMP server
-- Returns task_id for tracking
-```
-
-### Generate Music
-```
-POST /generate/{task_id}
-- Start music generation process
-- Runs in background
-```
-
-### Check Status
-```
-GET /status/{task_id}
-- Returns current processing status
-- Statuses: uploaded, converting, generating, merging, done, error
-```
-
-### Download Result
-```
-GET /download/{task_id}
-- Download final merged MP4 video
-- Cleans up temp files after download
-```
-
-## Processing Pipeline
-
-1. **Upload** → FLV video stored temporarily
-2. **Convert** → FLV to MP4 conversion
-3. **Analyze** → Extract video metadata (duration, resolution)
-4. **Generate** → Create music prompt and call Suno API
-5. **Poll** → Wait for music generation completion
-6. **Download** → Get generated MP3 from Suno
-7. **Merge** → Combine video and audio with FFmpeg
-8. **Cleanup** → Remove temporary files
-
-## RTMP Server Integration
-
-Your RTMP server can integrate by making HTTP POST requests:
-
+### RTMP Server Integration
 ```bash
-# Upload video after recording stops
-curl -X POST "http://localhost:8000/upload" \
-  -F "file=@recorded_video.flv"
+# Upload video after recording
+curl -X POST "http://localhost:8000/upload" -F "file=@video.flv"
 
-# Start music generation
+# Start processing
 curl -X POST "http://localhost:8000/generate/{task_id}"
 
-# Check status
+# Monitor progress
 curl "http://localhost:8000/status/{task_id}"
 
-# Download final video
-curl "http://localhost:8000/download/{task_id}" -o final_video.mp4
+# Download result
+curl "http://localhost:8000/download/{task_id}" -o output.mp4
 ```
 
-## Requirements
-
-- Python 3.8+
-- FFmpeg installed on system
-- Suno API access
-- RTMP server for video capture
+### Health Check
+```bash
+curl "http://localhost:8000/"
+```
+Returns server status and active task count.
 
 ## File Structure
 
 ```
-backend/
+hackmit/
 ├── main.py              # FastAPI application
-├── requirements.txt     # Python dependencies
-├── .env                # Environment variables
-├── temp/               # Temporary file storage
+├── test_api.py          # End-to-end test suite
+├── requirements.txt     # Dependencies
+├── temp/               # Temporary storage
 │   ├── videos/         # Uploaded FLV files
 │   ├── music/          # Generated MP3 files
-│   └── output/         # Final merged videos
-└── README.md           # This file
+│   └── output/         # Final MP4 files
+└── test_data/          # Test video files
 ```
+
+## Error Handling
+
+- Input validation for file types and sizes
+- Timeout handling for external API calls
+- Graceful error recovery with detailed messages
+- Background task error logging
+
+## Performance
+
+- Async processing maintains server responsiveness
+- Concurrent task limiting prevents resource exhaustion
+- Efficient FFmpeg operations with proper timeouts
+- Memory-optimized file handling
