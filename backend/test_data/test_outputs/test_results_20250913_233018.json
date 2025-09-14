@@ -1,0 +1,76 @@
+{
+  "summary": {
+    "passed": 1,
+    "total": 8,
+    "success_rate": 12.5,
+    "timestamp": "2025-09-13T23:30:18.886437"
+  },
+  "tests": [
+    {
+      "test_name": "Backend Health Check",
+      "success": false,
+      "message": "Connection failed: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: / (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x103a38680>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+      "timestamp": "2025-09-13T23:30:18.882681",
+      "details": {}
+    },
+    {
+      "test_name": "Photo File Validation",
+      "success": true,
+      "message": "Photo validated: 0.29MB",
+      "timestamp": "2025-09-13T23:30:18.882736",
+      "details": {
+        "file_size_mb": 0.29,
+        "file_path": "test_photo.jpg"
+      }
+    },
+    {
+      "test_name": "Photo Upload",
+      "success": false,
+      "message": "Request failed: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /upload-photo (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x103a39430>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+      "timestamp": "2025-09-13T23:30:18.883621",
+      "details": {}
+    },
+    {
+      "test_name": "Library Endpoint",
+      "success": false,
+      "message": "Request failed: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /library (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x103a39b80>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+      "timestamp": "2025-09-13T23:30:18.884487",
+      "details": {}
+    },
+    {
+      "test_name": "Monitor Processing",
+      "success": false,
+      "message": "No task ID available",
+      "timestamp": "2025-09-13T23:30:18.884505",
+      "details": {}
+    },
+    {
+      "test_name": "Specific Video Info",
+      "success": false,
+      "message": "No task ID available",
+      "timestamp": "2025-09-13T23:30:18.884511",
+      "details": {}
+    },
+    {
+      "test_name": "Video Download",
+      "success": false,
+      "message": "No task ID available",
+      "timestamp": "2025-09-13T23:30:18.884515",
+      "details": {}
+    },
+    {
+      "test_name": "Error Handling - Invalid Task ID",
+      "success": false,
+      "message": "Request failed: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /status/invalid-task-id (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x103a3a2a0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+      "timestamp": "2025-09-13T23:30:18.885408",
+      "details": {}
+    },
+    {
+      "test_name": "Error Handling - Invalid Download",
+      "success": false,
+      "message": "Request failed: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /download/invalid-task-id (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x103a3a9c0>: Failed to establish a new connection: [Errno 61] Connection refused'))",
+      "timestamp": "2025-09-13T23:30:18.886251",
+      "details": {}
+    }
+  ]
+}

@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from anthropic import Anthropic
+from PIL import Image
 
 # Load environment variables
 load_dotenv()
@@ -25,16 +26,16 @@ SUNO_API_KEY = os.getenv("SUNO_API_KEY", "your_suno_api_key_here")
 SUNO_BASE_URL = os.getenv("SUNO_BASE_URL", "https://studio-api.prod.suno.com/api/v2/external/hackmit")
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "your_claude_api_key_here")
 TEMP_DIR = Path(os.getenv("TEMP_DIR", "temp"))
-MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "104857600"))  # 100MB
+MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB for photos
 
 # Ensure temp directories exist
 TEMP_DIR.mkdir(exist_ok=True)
-(TEMP_DIR / "videos").mkdir(exist_ok=True)
+(TEMP_DIR / "photos").mkdir(exist_ok=True)
 (TEMP_DIR / "music").mkdir(exist_ok=True)
 (TEMP_DIR / "output").mkdir(exist_ok=True)
 
 # FastAPI app
-app = FastAPI(title="Mentra + Suno HackMIT Backend", version="1.0.0")
+app = FastAPI(title="Photo to Video Processor", version="1.0.0")
 
 # Data Models
 class TaskStatus(str, Enum):
@@ -49,7 +50,7 @@ class Task(BaseModel):
     task_id: str
     status: TaskStatus
     progress: int
-    video_path: str
+    photo_path: str
     music_path: Optional[str] = None
     output_path: Optional[str] = None
     error_message: Optional[str] = None
@@ -101,66 +102,6 @@ async def run_ffmpeg_async(cmd: list, timeout: int = 300) -> tuple[int, str, str
     except Exception as e:
         return -1, "", str(e)
 
-async def get_video_metadata(video_path: str) -> dict:
-    """Extract video metadata using ffmpeg asynchronously"""
-    try:
-        cmd = [
-            'ffprobe', '-v', 'quiet', '-print_format', 'json',
-            '-show_streams', '-show_format', video_path
-        ]
-        
-        returncode, stdout, stderr = await run_ffmpeg_async(cmd, timeout=30)
-        
-        if returncode != 0:
-            raise Exception(f"FFprobe failed: {stderr}")
-        
-        import json
-        data = json.loads(stdout)
-        video_stream = next(stream for stream in data['streams'] if stream['codec_type'] == 'video')
-        
-        return {
-            'duration': float(video_stream.get('duration', 0)),
-            'width': int(video_stream.get('width', 0)),
-            'height': int(video_stream.get('height', 0)),
-            'fps': eval(video_stream.get('r_frame_rate', '0/1'))
-        }
-    except Exception as e:
-        return {'duration': 30, 'width': 1920, 'height': 1080, 'fps': 30}
-
-async def extract_video_frames(video_path: str, num_frames: int = 3) -> list:
-    """Extract key frames from video for analysis asynchronously"""
-    try:
-        # Get video duration first
-        metadata = await get_video_metadata(video_path)
-        duration = metadata.get('duration', 30)
-        
-        frames = []
-        
-        # Extract frames at different points in the video
-        for i in range(num_frames):
-            timestamp = (duration / (num_frames + 1)) * (i + 1)
-            frame_path = str(TEMP_DIR / f"frame_{i}.jpg")
-            
-            cmd = [
-                'ffmpeg', '-y', '-v', 'quiet',
-                '-ss', str(timestamp),
-                '-i', video_path,
-                '-vframes', '1',
-                '-f', 'image2',
-                '-vcodec', 'mjpeg',
-                frame_path
-            ]
-            
-            returncode, stdout, stderr = await run_ffmpeg_async(cmd, timeout=30)
-            
-            if returncode == 0 and os.path.exists(frame_path):
-                frames.append(frame_path)
-        
-        return frames
-    except Exception as e:
-        print(f"Frame extraction error: {e}")
-        return []
-
 def encode_image_to_base64(image_path: str) -> str:
     """Convert image to base64 for Claude API"""
     try:
@@ -170,42 +111,19 @@ def encode_image_to_base64(image_path: str) -> str:
         print(f"Image encoding error: {e}")
         return ""
 
-async def analyze_video_with_claude(video_path: str, metadata: dict) -> str:
-    """Use Claude API to analyze video frames and generate music prompt"""
+async def analyze_photo_with_claude(photo_path: str) -> str:
+    """Use Claude API to analyze photo and generate music prompt"""
     try:
-        # Extract frames from video
-        frames = await extract_video_frames(video_path, num_frames=3)
-        if not frames:
-            raise HTTPException(status_code=500, detail="Failed to extract video frames for analysis")
-        
         # Initialize Claude client
         client = Anthropic(api_key=CLAUDE_API_KEY)
         
-        # Prepare images for Claude
-        image_data = []
-        for frame_path in frames:
-            base64_image = encode_image_to_base64(frame_path)
-            if base64_image:
-                image_data.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": base64_image
-                    }
-                })
-        
-        if not image_data:
-            raise HTTPException(status_code=500, detail="Failed to process video frames for analysis")
+        # Encode photo for Claude
+        base64_image = encode_image_to_base64(photo_path)
+        if not base64_image:
+            raise HTTPException(status_code=500, detail="Failed to process photo for analysis")
         
         # Create prompt for Claude
-        duration = int(metadata.get('duration', 30))
-        
-        claude_prompt = f"""You are a professional music producer and songwriter. Analyze these video frames and create ACTUAL LYRICS for a real song, not a description.
-
-VIDEO CONTEXT:
-- Duration: {duration} seconds
-- Resolution: {metadata.get('width', 1920)}x{metadata.get('height', 1080)}
+        claude_prompt = """You are a professional music producer and songwriter. Analyze this photo and create ACTUAL LYRICS for a real song, not a description.
 
 CRITICAL: Generate REAL LYRICS that sound like an actual song, not generic AI music.
 
@@ -233,31 +151,18 @@ LYRICS REQUIREMENTS:
 - Make them emotional and relatable
 - Use vivid imagery and metaphors
 - Include repetition for catchiness
-- Match the mood and energy of the video
+- Match the mood and energy of the photo
 - Sound like a real artist wrote them
 - Avoid generic or cliché phrases
 
-STYLE INSPIRATION (choose one that fits the video):
+STYLE INSPIRATION (choose one that fits the photo):
 - Indie rock like Tame Impala, Radiohead, or Bon Iver
 - Electronic pop like Daft Punk, ODESZA, or Flume
 - Acoustic folk like Bon Iver, Fleet Foxes, or Iron & Wine
 - Alternative rock like Radiohead, Arcade Fire, or The National
 - Dream pop like Beach House, Cocteau Twins, or Mazzy Star
 
-EXAMPLES OF GOOD LYRICS:
-[Verse 1]
-Driving through the neon lights
-City dreams in my mind tonight
-Every corner holds a story
-Every moment feels like glory
-
-[Chorus]
-We're alive, we're breathing
-In this moment we're believing
-Nothing can stop us now
-We're alive, we're breathing
-
-Write lyrics that match the video's mood and energy. Make them sound like a real song."""
+Write lyrics that match the photo's mood and energy. Make them sound like a real song."""
 
         # Call Claude API
         message = client.messages.create(
@@ -267,32 +172,32 @@ Write lyrics that match the video's mood and energy. Make them sound like a real
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": claude_prompt}
-                    ] + image_data
+                        {"type": "text", "text": claude_prompt},
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": base64_image
+                            }
+                        }
+                    ]
                 }
             ]
         )
         
         prompt = message.content[0].text.strip()
-        
-        # Clean up frame files
-        for frame_path in frames:
-            try:
-                os.remove(frame_path)
-            except:
-                pass
-        
         return prompt
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Claude analysis failed: {str(e)}")
 
-async def generate_music_prompt(metadata: dict, video_path: str) -> str:
+async def generate_music_prompt(photo_path: str) -> str:
     """Generate music prompt using Claude API"""
     if not CLAUDE_API_KEY or CLAUDE_API_KEY == "your_claude_api_key_here":
         raise HTTPException(status_code=500, detail="Claude API key not configured")
     
-    return await analyze_video_with_claude(video_path, metadata)
+    return await analyze_photo_with_claude(photo_path)
 
 def extract_tags_from_prompt(prompt: str) -> str:
     """Extract relevant tags from the lyrics prompt for Suno API"""
@@ -352,7 +257,7 @@ def extract_tags_from_prompt(prompt: str) -> str:
     
     return ', '.join(all_tags)
 
-async def call_suno_api(prompt: str, duration: int = 30) -> str:
+async def call_suno_api(prompt: str, duration: int = 10) -> str:
     """Call Suno API to generate music using official HackMIT API format"""
     headers = {
         "Authorization": f"Bearer {SUNO_API_KEY}",
@@ -446,24 +351,27 @@ async def trim_audio(input_path: str, output_path: str, duration: float):
         import shutil
         shutil.copy2(input_path, output_path)
 
-async def convert_flv_to_mp4(flv_path: str, mp4_path: str):
-    """Convert FLV to MP4 using ffmpeg asynchronously"""
+async def create_video_from_photo(photo_path: str, output_path: str, duration: int = 10):
+    """Create a static video from photo using FFmpeg"""
     cmd = [
         'ffmpeg', '-y', '-v', 'quiet',
-        '-i', flv_path,
-        '-vcodec', 'libx264',
-        '-acodec', 'aac',
-        mp4_path
+        '-loop', '1',
+        '-i', photo_path,
+        '-c:v', 'libx264',
+        '-t', str(duration),
+        '-pix_fmt', 'yuv420p',
+        '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2',
+        output_path
     ]
     
-    returncode, stdout, stderr = await run_ffmpeg_async(cmd, timeout=300)
+    returncode, stdout, stderr = await run_ffmpeg_async(cmd, timeout=120)
     
     if returncode != 0:
-        raise Exception(f"FFmpeg conversion failed: {stderr}")
+        raise Exception(f"FFmpeg video creation failed: {stderr}")
 
 async def merge_video_audio(video_path: str, audio_path: str, output_path: str):
     """Replace video audio with Suno music only"""
-    print(f"🔧 MERGING: Replacing video audio with Suno music only")
+    print(f"🔧 MERGING: Adding music to video")
     print(f"   Video: {video_path}")
     print(f"   Audio: {audio_path}")
     print(f"   Output: {output_path}")
@@ -495,9 +403,9 @@ async def cleanup_temp_files(task_id: str):
         if not task:
             return
             
-        # Remove video files
-        if task.video_path and os.path.exists(task.video_path):
-            os.remove(task.video_path)
+        # Remove photo files
+        if task.photo_path and os.path.exists(task.photo_path):
+            os.remove(task.photo_path)
         
         # Keep music files for debugging - don't clean up
         print(f"🎵 MUSIC SAVED: {task.music_path}")
@@ -508,8 +416,8 @@ async def cleanup_temp_files(task_id: str):
     except Exception as e:
         print(f"Cleanup error: {e}")
 
-async def process_video_task(task_id: str):
-    """Background task to process video with concurrency control"""
+async def process_photo_task(task_id: str):
+    """Background task to process photo with concurrency control"""
     global active_tasks
     
     # Acquire semaphore to limit concurrent tasks
@@ -522,45 +430,40 @@ async def process_video_task(task_id: str):
             if not task:
                 return
             
-            await _process_video_task_internal(task_id, task)
+            await _process_photo_task_internal(task_id, task)
         finally:
             active_tasks -= 1
             print(f"Completed task {task_id} (active: {active_tasks})")
 
-async def _process_video_task_internal(task_id: str, task: Task):
-    """Internal video processing logic"""
+async def _process_photo_task_internal(task_id: str, task: Task):
+    """Internal photo processing logic"""
     try:
-        # Step 1: Convert FLV to MP4
-        print(f"🔄 CONVERTING VIDEO: FLV to MP4...")
+        # Step 1: Create video from photo
+        print(f"🔄 CONVERTING PHOTO: Creating video from photo...")
         task.status = TaskStatus.CONVERTING
         task.progress = 20
         task.updated_at = datetime.now()
         
-        flv_path = task.video_path
-        mp4_path = str(TEMP_DIR / "videos" / f"{task_id}.mp4")
-        print(f"   Input: {flv_path}")
-        print(f"   Output: {mp4_path}")
+        photo_path = task.photo_path
+        video_path = str(TEMP_DIR / "output" / f"{task_id}_temp.mp4")
+        print(f"   Input: {photo_path}")
+        print(f"   Output: {video_path}")
         
-        await convert_flv_to_mp4(flv_path, mp4_path)
-        task.video_path = mp4_path
-        print(f"✅ Video conversion complete: {mp4_path}")
+        await create_video_from_photo(photo_path, video_path, duration=10)
+        print(f"✅ Video creation complete: {video_path}")
         
-        # Step 2: Analyze video and generate music
+        # Step 2: Analyze photo and generate music
         task.status = TaskStatus.GENERATING
         task.progress = 40
         task.updated_at = datetime.now()
         
-        print(f"📊 ANALYZING VIDEO: Getting metadata...")
-        metadata = await get_video_metadata(mp4_path)
-        print(f"✅ Video metadata: {metadata}")
-        
         print(f"🤖 GENERATING PROMPT: Calling Claude API...")
-        prompt = await generate_music_prompt(metadata, mp4_path)
+        prompt = await generate_music_prompt(photo_path)
         print(f"✅ Generated prompt: {prompt[:100]}...")
         
         # Call Suno API
         print(f"🎵 CALLING SUNO API: Generating music...")
-        suno_task_id = await call_suno_api(prompt, int(metadata.get('duration', 30)))
+        suno_task_id = await call_suno_api(prompt, duration=10)
         print(f"✅ Suno API called, task ID: {suno_task_id}")
         
         # Poll for completion
@@ -589,9 +492,8 @@ async def _process_video_task_internal(task_id: str, task: Task):
         
         # Trim music to match video duration
         print(f"✂️  TRIMMING MUSIC: Matching video duration...")
-        video_duration = metadata.get('duration', 30)
         trimmed_music_path = str(TEMP_DIR / "music" / f"{task_id}_trimmed.mp3")
-        await trim_audio(music_path, trimmed_music_path, video_duration)
+        await trim_audio(music_path, trimmed_music_path, 10.0)
         task.music_path = trimmed_music_path
         print(f"✅ Music trimmed: {trimmed_music_path}")
         
@@ -601,8 +503,12 @@ async def _process_video_task_internal(task_id: str, task: Task):
         task.updated_at = datetime.now()
         
         output_path = str(TEMP_DIR / "output" / f"{task_id}.mp4")
-        await merge_video_audio(mp4_path, trimmed_music_path, output_path)
+        await merge_video_audio(video_path, trimmed_music_path, output_path)
         task.output_path = output_path
+        
+        # Clean up temp video
+        if os.path.exists(video_path):
+            os.remove(video_path)
         
         # Step 4: Complete
         task.status = TaskStatus.DONE
@@ -615,23 +521,23 @@ async def _process_video_task_internal(task_id: str, task: Task):
         task.updated_at = datetime.now()
 
 # API Endpoints
-@app.post("/upload", response_model=UploadResponse)
-async def upload_video(file: UploadFile = File(...)):
-    """Upload FLV video from RTMP server"""
+@app.post("/upload-photo", response_model=UploadResponse)
+async def upload_photo(file: UploadFile = File(...)):
+    """Upload photo from glasses"""
     
     # Validate file
     if file.size > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File too large")
     
-    if not file.filename or not file.filename.lower().endswith('.flv'):
-        raise HTTPException(status_code=400, detail="Only FLV files are supported")
+    if not file.filename or not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        raise HTTPException(status_code=400, detail="Only JPG/PNG files are supported")
     
     # Generate task ID and save file
     task_id = generate_task_id()
-    video_path = str(TEMP_DIR / "videos" / f"{task_id}.flv")
+    photo_path = str(TEMP_DIR / "photos" / f"{task_id}.jpg")
     
     try:
-        with open(video_path, "wb") as buffer:
+        with open(photo_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File upload error: {str(e)}")
@@ -641,33 +547,20 @@ async def upload_video(file: UploadFile = File(...)):
         task_id=task_id,
         status=TaskStatus.UPLOADED,
         progress=0,
-        video_path=video_path,
+        photo_path=photo_path,
         created_at=datetime.now(),
         updated_at=datetime.now()
     )
     tasks[task_id] = task
     
+    # Start processing immediately
+    asyncio.create_task(process_photo_task(task_id))
+    
     return UploadResponse(
         task_id=task_id,
         status="uploaded",
-        message="Video uploaded successfully"
+        message="Photo uploaded and processing started"
     )
-
-@app.post("/generate/{task_id}")
-async def generate_music(task_id: str, background_tasks: BackgroundTasks):
-    """Start music generation for uploaded video"""
-    
-    if task_id not in tasks:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks[task_id]
-    if task.status != TaskStatus.UPLOADED:
-        raise HTTPException(status_code=400, detail="Task already processed or in progress")
-    
-    # Start background processing
-    background_tasks.add_task(process_video_task, task_id)
-    
-    return {"message": "Music generation started", "task_id": task_id}
 
 @app.get("/status/{task_id}", response_model=StatusResponse)
 async def get_status(task_id: str):
@@ -688,7 +581,7 @@ async def get_status(task_id: str):
 
 @app.get("/download/{task_id}")
 async def download_video(task_id: str):
-    """Download final merged video"""
+    """Download final processed video"""
     
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -706,7 +599,7 @@ async def download_video(task_id: str):
     
     return FileResponse(
         path=task.output_path,
-        filename=f"merged_video_{task_id}.mp4",
+        filename=f"processed_video_{task_id}.mp4",
         media_type="video/mp4"
     )
 
@@ -780,13 +673,6 @@ async def get_video_info(task_id: str):
         # Get task info if available
         task_info = tasks.get(task_id, {})
         
-        # Try to get video metadata
-        metadata = {}
-        try:
-            metadata = await get_video_metadata(str(output_file))
-        except:
-            pass
-        
         video_info = {
             "task_id": task_id,
             "filename": output_file.name,
@@ -797,8 +683,7 @@ async def get_video_info(task_id: str):
             "download_url": f"/download/{task_id}",
             "status": task_info.get("status", "unknown") if task_info else "unknown",
             "progress": task_info.get("progress", 0) if task_info else 0,
-            "metadata": metadata,
-            "video_path": str(output_file),
+            "photo_path": task_info.get("photo_path") if task_info else None,
             "music_path": task_info.get("music_path") if task_info else None
         }
         
@@ -807,72 +692,11 @@ async def get_video_info(task_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting video info: {str(e)}")
 
-@app.post("/rtmp_callback")
-async def rtmp_callback(request: Request):
-    """Handle RTMP stream completion callback"""
-    try:
-        # Parse RTMP callback data
-        form_data = await request.form()
-        stream_key = form_data.get("name", "")
-        file_path = form_data.get("file", "")
-        
-        print(f"🎥 RTMP STREAM COMPLETED:")
-        print(f"   Stream Key: {stream_key}")
-        print(f"   File Path: {file_path}")
-        
-        if not file_path or not os.path.exists(file_path):
-            print(f"❌ RTMP file not found: {file_path}")
-            return {"status": "error", "message": "File not found"}
-        
-        # Generate task ID and move file to our temp directory
-        task_id = generate_task_id()
-        video_path = str(TEMP_DIR / "videos" / f"{task_id}.flv")
-        
-        # Move the RTMP file to our temp directory
-        shutil.move(file_path, video_path)
-        print(f"✅ RTMP file moved to: {video_path}")
-        
-        # Create task
-        task = Task(
-            task_id=task_id,
-            status=TaskStatus.UPLOADED,
-            progress=0,
-            video_path=video_path,
-            created_at=datetime.now(),
-            updated_at=datetime.now()
-        )
-        tasks[task_id] = task
-        
-        print(f"✅ RTMP task created: {task_id}")
-        
-        return {
-            "status": "success", 
-            "task_id": task_id,
-            "message": "RTMP stream processed successfully"
-        }
-        
-    except Exception as e:
-        print(f"❌ RTMP callback error: {e}")
-        return {"status": "error", "message": str(e)}
-
-@app.get("/rtmp_info")
-async def get_rtmp_info():
-    """Get RTMP server information for clients"""
-    return {
-        "rtmp_url": "rtmp://localhost:1935/live",
-        "stream_key": "your_stream_key_here",
-        "instructions": {
-            "obs": "Use rtmp://localhost:1935/live as Server, and any key as Stream Key",
-            "ffmpeg": "ffmpeg -i input.mp4 -f flv rtmp://localhost:1935/live/your_key",
-            "note": "Stream will be automatically processed when you stop streaming"
-        }
-    }
-
 @app.get("/")
 async def root():
     """Health check endpoint"""
     return {
-        "message": "Mentra + Suno HackMIT Backend",
+        "message": "Photo to Video Processor",
         "status": "running",
         "total_tasks": len(tasks),
         "active_tasks": active_tasks,

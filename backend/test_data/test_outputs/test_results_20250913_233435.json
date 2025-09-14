@@ -1,0 +1,328 @@
+{
+  "summary": {
+    "passed": 6,
+    "total": 8,
+    "success_rate": 75.0,
+    "timestamp": "2025-09-13T23:34:35.139957"
+  },
+  "tests": [
+    {
+      "test_name": "Backend Health Check",
+      "success": true,
+      "message": "Backend is running: Photo to Video Processor",
+      "timestamp": "2025-09-13T23:33:03.733264",
+      "details": {
+        "active_tasks": 0,
+        "total_tasks": 1,
+        "max_concurrent": 3
+      }
+    },
+    {
+      "test_name": "Photo File Validation",
+      "success": true,
+      "message": "Photo validated: 0.29MB",
+      "timestamp": "2025-09-13T23:33:03.733432",
+      "details": {
+        "file_size_mb": 0.29,
+        "file_path": "test_photo.jpg"
+      }
+    },
+    {
+      "test_name": "Photo Upload",
+      "success": true,
+      "message": "Photo uploaded successfully",
+      "timestamp": "2025-09-13T23:33:03.736983",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "uploaded",
+        "message": "Photo uploaded and processing started"
+      }
+    },
+    {
+      "test_name": "Library Endpoint",
+      "success": true,
+      "message": "Library retrieved: 0 videos",
+      "timestamp": "2025-09-13T23:33:03.742386",
+      "details": {
+        "total_count": 0,
+        "total_size_mb": 0,
+        "videos": 0
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: converting",
+      "timestamp": "2025-09-13T23:33:03.744746",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "converting",
+        "progress": 20,
+        "message": "Task is converting"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:33:14.979550",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:33:19.987491",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:33:24.996608",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:33:30.010043",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:33:35.017621",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:33:40.027589",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:33:45.036785",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:33:50.046427",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:33:55.055795",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:34:00.064621",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:34:05.072027",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:34:10.079925",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:34:15.088018",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:34:20.097517",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:34:25.105434",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: generating",
+      "timestamp": "2025-09-13T23:34:30.114389",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "generating",
+        "progress": 40,
+        "message": "Task is generating"
+      }
+    },
+    {
+      "test_name": "Status Endpoint",
+      "success": true,
+      "message": "Status retrieved: done",
+      "timestamp": "2025-09-13T23:34:35.120841",
+      "details": {
+        "task_id": "4e43986d-7d6e-44a6-94ed-e83976fad2b1",
+        "status": "done",
+        "progress": 100,
+        "message": "Task is done"
+      }
+    },
+    {
+      "test_name": "Monitor Processing",
+      "success": true,
+      "message": "Processing completed in 91.4s",
+      "timestamp": "2025-09-13T23:34:35.121057",
+      "details": {
+        "duration_seconds": 91.4,
+        "status_changes": [
+          {
+            "status": "converting",
+            "progress": 20,
+            "timestamp": "2025-09-13T23:33:03.744816"
+          },
+          {
+            "status": "generating",
+            "progress": 40,
+            "timestamp": "2025-09-13T23:33:14.979638"
+          },
+          {
+            "status": "done",
+            "progress": 100,
+            "timestamp": "2025-09-13T23:34:35.121030"
+          }
+        ],
+        "final_progress": 100
+      }
+    },
+    {
+      "test_name": "Specific Video Info",
+      "success": false,
+      "message": "Video info failed: 500",
+      "timestamp": "2025-09-13T23:34:35.124926",
+      "details": {}
+    },
+    {
+      "test_name": "Video Download",
+      "success": true,
+      "message": "Video downloaded: 1.16MB",
+      "timestamp": "2025-09-13T23:34:35.133255",
+      "details": {
+        "output_path": "test_outputs/test_video_4e43986d-7d6e-44a6-94ed-e83976fad2b1.mp4",
+        "file_size_mb": 1.16,
+        "content_type": "video/mp4"
+      }
+    },
+    {
+      "test_name": "Error Handling - Invalid Task ID",
+      "success": true,
+      "message": "404 returned for invalid task",
+      "timestamp": "2025-09-13T23:34:35.137112",
+      "details": {}
+    },
+    {
+      "test_name": "Error Handling - Invalid Download",
+      "success": true,
+      "message": "404 returned for invalid download",
+      "timestamp": "2025-09-13T23:34:35.139671",
+      "details": {}
+    }
+  ]
+}
