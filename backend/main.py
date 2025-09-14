@@ -10,8 +10,7 @@ from enum import Enum
 from pathlib import Path
 
 import httpx
-import ffmpeg
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -603,12 +602,7 @@ async def _process_photo_task_internal(task_id: str, task: Task):
         task.updated_at = datetime.now()
 
 # API Endpoints
-@app.get("/test-upload")
-async def test_upload():
-    """Test endpoint to verify routing"""
-    return {"message": "Upload endpoint routing is working", "status": "ok"}
-
-@app.post("/upload-photo", response_model=UploadResponse)
+@app.post("/photos/upload", response_model=UploadResponse)
 async def upload_photo(file: UploadFile = File(...)):
     """Upload photo from glasses"""
     
@@ -655,9 +649,9 @@ async def upload_photo(file: UploadFile = File(...)):
         message="Photo uploaded and processing started"
     )
 
-@app.get("/status/{task_id}", response_model=StatusResponse)
-async def get_status(task_id: str):
-    """Get processing status for a task"""
+@app.get("/photos/{task_id}/status", response_model=StatusResponse)
+async def get_photo_status(task_id: str):
+    """Get photo processing status"""
     
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -672,9 +666,9 @@ async def get_status(task_id: str):
         error_message=task.error_message
     )
 
-@app.get("/download/{task_id}")
+@app.get("/photos/{task_id}/download")
 async def download_video(task_id: str):
-    """Download final processed video"""
+    """Download processed video"""
     
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -696,9 +690,9 @@ async def download_video(task_id: str):
         media_type="video/mp4"
     )
 
-@app.get("/library")
-async def get_video_library():
-    """Get library of all processed videos"""
+@app.get("/photos")
+async def get_photos():
+    """Get all processed photos/videos"""
     output_dir = TEMP_DIR / "output"
     
     if not output_dir.exists():
@@ -748,9 +742,9 @@ async def get_video_library():
         "total_size_mb": sum(v["file_size_mb"] for v in videos)
     }
 
-@app.get("/library/{task_id}")
-async def get_video_info(task_id: str):
-    """Get detailed info about a specific video"""
+@app.get("/photos/{task_id}")
+async def get_photo_info(task_id: str):
+    """Get detailed info about a specific photo/video"""
     output_file = TEMP_DIR / "output" / f"{task_id}.mp4"
     
     if not output_file.exists():
@@ -784,41 +778,6 @@ async def get_video_info(task_id: str):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting video info: {str(e)}")
-
-@app.get("/debug/task/{task_id}")
-async def debug_task(task_id: str):
-    """Debug endpoint to get detailed task information"""
-    if task_id not in tasks:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks[task_id]
-    
-    # Check if files exist
-    photo_exists = os.path.exists(task.photo_path) if task.photo_path else False
-    music_exists = os.path.exists(task.music_path) if task.music_path else False
-    output_exists = os.path.exists(task.output_path) if task.output_path else False
-    
-    return {
-        "task_id": task_id,
-        "status": task.status.value,
-        "progress": task.progress,
-        "error_message": task.error_message,
-        "created_at": task.created_at.isoformat(),
-        "updated_at": task.updated_at.isoformat(),
-        "files": {
-            "photo_path": task.photo_path,
-            "photo_exists": photo_exists,
-            "music_path": task.music_path,
-            "music_exists": music_exists,
-            "output_path": task.output_path,
-            "output_exists": output_exists
-        },
-        "environment": {
-            "suno_api_key_set": bool(SUNO_API_KEY and SUNO_API_KEY != "your_suno_api_key_here"),
-            "claude_api_key_set": bool(CLAUDE_API_KEY and CLAUDE_API_KEY != "your_claude_api_key_here"),
-            "suno_base_url": SUNO_BASE_URL
-        }
-    }
 
 @app.get("/")
 async def root():
