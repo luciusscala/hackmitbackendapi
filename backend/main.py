@@ -37,6 +37,18 @@ TEMP_DIR.mkdir(exist_ok=True)
 # FastAPI app
 app = FastAPI(title="Photo to Video Processor", version="1.0.0")
 
+# Add request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"🌐 REQUEST: {request.method} {request.url}")
+    print(f"   Headers: {dict(request.headers)}")
+    print(f"   Client: {request.client}")
+    
+    response = await call_next(request)
+    
+    print(f"📤 RESPONSE: {response.status_code}")
+    return response
+
 # Data Models
 class TaskStatus(str, Enum):
     UPLOADED = "uploaded"
@@ -591,12 +603,23 @@ async def _process_photo_task_internal(task_id: str, task: Task):
         task.updated_at = datetime.now()
 
 # API Endpoints
+@app.get("/test-upload")
+async def test_upload():
+    """Test endpoint to verify routing"""
+    return {"message": "Upload endpoint routing is working", "status": "ok"}
+
 @app.post("/upload-photo", response_model=UploadResponse)
 async def upload_photo(file: UploadFile = File(...)):
     """Upload photo from glasses"""
     
+    print(f"📸 UPLOAD REQUEST: Received photo upload request")
+    print(f"   Filename: {file.filename}")
+    print(f"   Content type: {file.content_type}")
+    print(f"   File size: {file.size}")
+    
     # Validate file
     if file.size > MAX_FILE_SIZE:
+        print(f"❌ File too large: {file.size} > {MAX_FILE_SIZE}")
         raise HTTPException(status_code=413, detail="File too large")
     
     if not file.filename or not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
