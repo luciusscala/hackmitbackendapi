@@ -259,6 +259,11 @@ def extract_tags_from_prompt(prompt: str) -> str:
 
 async def call_suno_api(prompt: str, duration: int = 10) -> str:
     """Call Suno API to generate music using official HackMIT API format"""
+    print(f"🎵 SUNO API CALL: Starting music generation")
+    print(f"   API Key present: {bool(SUNO_API_KEY and SUNO_API_KEY != 'your_suno_api_key_here')}")
+    print(f"   Base URL: {SUNO_BASE_URL}")
+    print(f"   Prompt length: {len(prompt)} characters")
+    
     headers = {
         "Authorization": f"Bearer {SUNO_API_KEY}",
         "Content-Type": "application/json"
@@ -266,6 +271,7 @@ async def call_suno_api(prompt: str, duration: int = 10) -> str:
     
     # Extract tags from prompt for better matching
     tags = extract_tags_from_prompt(prompt)
+    print(f"   Extracted tags: {tags}")
     
     # Use official HackMIT API format - prompt should contain actual lyrics
     data = {
@@ -274,28 +280,56 @@ async def call_suno_api(prompt: str, duration: int = 10) -> str:
         "make_instrumental": False  # Allow vocals since we have lyrics
     }
     
+    print(f"   Request data: {data}")
+    
     async with httpx.AsyncClient() as client:
         try:
+            print(f"   Making POST request to: {SUNO_BASE_URL}/generate")
             response = await client.post(
                 f"{SUNO_BASE_URL}/generate",
                 headers=headers,
                 json=data,
                 timeout=30.0
             )
+            
+            print(f"   Response status: {response.status_code}")
+            print(f"   Response headers: {dict(response.headers)}")
+            
             response.raise_for_status()
             result = response.json()
             
+            print(f"   Response body: {result}")
+            
             # Official API returns a single clip object
             if isinstance(result, dict) and "id" in result:
+                print(f"✅ Suno API success: Task ID {result['id']}")
                 return result["id"]
             else:
-                raise Exception("Unexpected response format from Suno API")
+                error_msg = f"Unexpected response format from Suno API: {result}"
+                print(f"❌ {error_msg}")
+                raise Exception(error_msg)
                 
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Suno API HTTP error {e.response.status_code}: {e.response.text}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
+        except httpx.TimeoutException as e:
+            error_msg = f"Suno API timeout: {str(e)}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
+        except httpx.RequestError as e:
+            error_msg = f"Suno API request error: {str(e)}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Suno API error: {str(e)}")
+            error_msg = f"Suno API unexpected error: {str(e)}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
 
 async def poll_suno_status(suno_task_id: str) -> Optional[str]:
     """Poll Suno API for music generation status"""
+    print(f"⏳ POLLING SUNO: Checking status for task {suno_task_id}")
+    
     headers = {
         "Authorization": f"Bearer {SUNO_API_KEY}",
         "Content-Type": "application/json"
@@ -303,24 +337,56 @@ async def poll_suno_status(suno_task_id: str) -> Optional[str]:
     
     async with httpx.AsyncClient() as client:
         try:
+            print(f"   Making GET request to: {SUNO_BASE_URL}/clips?ids={suno_task_id}")
             response = await client.get(
                 f"{SUNO_BASE_URL}/clips?ids={suno_task_id}",
                 headers=headers,
                 timeout=30.0
             )
+            
+            print(f"   Response status: {response.status_code}")
             response.raise_for_status()
             result = response.json()
+            
+            print(f"   Response body: {result}")
             
             # The response is an array of clips
             if isinstance(result, list) and len(result) > 0:
                 clip = result[0]
                 status = clip.get("status")
+                print(f"   Clip status: {status}")
                 
                 if status == "complete" or status == "streaming":
-                    return clip.get("audio_url")
-            return None
+                    audio_url = clip.get("audio_url")
+                    print(f"✅ Music ready! Audio URL: {audio_url}")
+                    return audio_url
+                elif status == "failed":
+                    error_msg = f"Music generation failed: {clip.get('error', 'Unknown error')}"
+                    print(f"❌ {error_msg}")
+                    raise Exception(error_msg)
+                else:
+                    print(f"   Status: {status} - continuing to poll...")
+                    return None
+            else:
+                print(f"   No clips found in response")
+                return None
+                
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Suno polling HTTP error {e.response.status_code}: {e.response.text}"
+            print(f"❌ {error_msg}")
+            raise Exception(error_msg)
+        except httpx.TimeoutException as e:
+            error_msg = f"Suno polling timeout: {str(e)}"
+            print(f"❌ {error_msg}")
+            raise Exception(error_msg)
+        except httpx.RequestError as e:
+            error_msg = f"Suno polling request error: {str(e)}"
+            print(f"❌ {error_msg}")
+            raise Exception(error_msg)
         except Exception as e:
-            return None
+            error_msg = f"Suno polling unexpected error: {str(e)}"
+            print(f"❌ {error_msg}")
+            raise Exception(error_msg)
 
 async def download_music(audio_url: str, output_path: str):
     """Download generated music from Suno"""
@@ -516,8 +582,12 @@ async def _process_photo_task_internal(task_id: str, task: Task):
         task.updated_at = datetime.now()
         
     except Exception as e:
+        import traceback
+        error_details = f"Error: {str(e)}\nTraceback: {traceback.format_exc()}"
+        print(f"❌ TASK FAILED: {error_details}")
+        
         task.status = TaskStatus.ERROR
-        task.error_message = str(e)
+        task.error_message = error_details
         task.updated_at = datetime.now()
 
 # API Endpoints
@@ -692,6 +762,41 @@ async def get_video_info(task_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting video info: {str(e)}")
 
+@app.get("/debug/task/{task_id}")
+async def debug_task(task_id: str):
+    """Debug endpoint to get detailed task information"""
+    if task_id not in tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task = tasks[task_id]
+    
+    # Check if files exist
+    photo_exists = os.path.exists(task.photo_path) if task.photo_path else False
+    music_exists = os.path.exists(task.music_path) if task.music_path else False
+    output_exists = os.path.exists(task.output_path) if task.output_path else False
+    
+    return {
+        "task_id": task_id,
+        "status": task.status.value,
+        "progress": task.progress,
+        "error_message": task.error_message,
+        "created_at": task.created_at.isoformat(),
+        "updated_at": task.updated_at.isoformat(),
+        "files": {
+            "photo_path": task.photo_path,
+            "photo_exists": photo_exists,
+            "music_path": task.music_path,
+            "music_exists": music_exists,
+            "output_path": task.output_path,
+            "output_exists": output_exists
+        },
+        "environment": {
+            "suno_api_key_set": bool(SUNO_API_KEY and SUNO_API_KEY != "your_suno_api_key_here"),
+            "claude_api_key_set": bool(CLAUDE_API_KEY and CLAUDE_API_KEY != "your_claude_api_key_here"),
+            "suno_base_url": SUNO_BASE_URL
+        }
+    }
+
 @app.get("/")
 async def root():
     """Health check endpoint"""
@@ -705,4 +810,5 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
