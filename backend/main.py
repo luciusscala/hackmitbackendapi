@@ -12,6 +12,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from anthropic import Anthropic
@@ -35,6 +36,15 @@ TEMP_DIR.mkdir(exist_ok=True)
 
 # FastAPI app
 app = FastAPI(title="Photo to Video Processor", version="1.0.0")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080", "http://localhost:5173", "http://127.0.0.1:8080", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Add request logging middleware
 @app.middleware("http")
@@ -670,22 +680,19 @@ async def get_photo_status(task_id: str):
 async def download_video(task_id: str):
     """Download processed video"""
     
-    if task_id not in tasks:
-        raise HTTPException(status_code=404, detail="Task not found")
+    # Check if file exists in output directory
+    output_file = TEMP_DIR / "output" / f"{task_id}.mp4"
     
-    task = tasks[task_id]
+    if not output_file.exists():
+        raise HTTPException(status_code=404, detail="Video file not found")
     
-    if task.status != TaskStatus.DONE:
+    # Check if task is in active tasks and get status
+    task = tasks.get(task_id)
+    if task and task.status != TaskStatus.DONE:
         raise HTTPException(status_code=400, detail="Video not ready yet")
     
-    if not task.output_path or not os.path.exists(task.output_path):
-        raise HTTPException(status_code=404, detail="Output file not found")
-    
-    # Clean up temp files after download
-    asyncio.create_task(cleanup_temp_files(task_id))
-    
     return FileResponse(
-        path=task.output_path,
+        path=str(output_file),
         filename=f"processed_video_{task_id}.mp4",
         media_type="video/mp4"
     )
@@ -715,6 +722,15 @@ async def get_photos():
             # Get task info if available
             task_info = tasks.get(task_id, {})
             
+            # Determine status - if file exists and is not in active tasks, it's completed
+            if task_info:
+                status = task_info.get("status", "unknown")
+                progress = task_info.get("progress", 0)
+            else:
+                # File exists in output directory but not in active tasks = completed
+                status = "done"
+                progress = 100
+            
             video_info = {
                 "task_id": task_id,
                 "filename": video_file.name,
@@ -723,8 +739,8 @@ async def get_photos():
                 "created_at": created_time.isoformat(),
                 "modified_at": modified_time.isoformat(),
                 "download_url": f"/download/{task_id}",
-                "status": task_info.get("status", "unknown") if task_info else "unknown",
-                "progress": task_info.get("progress", 0) if task_info else 0
+                "status": status,
+                "progress": progress
             }
             
             videos.append(video_info)
